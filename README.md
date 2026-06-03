@@ -68,7 +68,7 @@ See [`docs/ADOPTION.md`](docs/ADOPTION.md) for the full team onboarding flow.
 
 ```bash
 # Lint Bash scripts
-shellcheck scripts/*.sh scripts/lib/*.sh
+shellcheck -x scripts/*.sh scripts/lib/*.sh
 
 # Validate Terraform modules
 terraform -chdir=terraform/environments/dev init -backend=false

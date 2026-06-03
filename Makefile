@@ -10,7 +10,7 @@ help: ## Show this help
 		awk 'BEGIN {FS=":.*?## "}; {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}'
 
 lint: ## Lint Bash scripts and Terraform
-	shellcheck scripts/*.sh scripts/lib/*.sh
+	shellcheck -x scripts/*.sh scripts/lib/*.sh
 	terraform -chdir=$(TF_DIR) fmt -check -recursive ../../
 
 fmt: ## Format Terraform

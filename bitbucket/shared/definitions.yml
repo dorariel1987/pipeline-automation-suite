@@ -19,7 +19,7 @@ definitions:
         image: atlassian/default-image:4
         script:
           - apt-get update -qq && apt-get install -y -qq shellcheck bats
-          - shellcheck scripts/*.sh scripts/lib/*.sh
+          - shellcheck -x scripts/*.sh scripts/lib/*.sh
           - bats scripts/tests/
 
     - step: &docker-build-push

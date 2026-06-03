@@ -6,6 +6,7 @@
 # subsequent loads a no-op so the `readonly` colour vars below don't blow up.
 
 if [[ -n "${__SUITE_LOGGING_LOADED__:-}" ]]; then
+    # shellcheck disable=SC2317  # reachable only when this file is sourced
     return 0 2>/dev/null || true
 fi
 __SUITE_LOGGING_LOADED__=1

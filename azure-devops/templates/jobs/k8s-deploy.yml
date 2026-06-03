@@ -1,0 +1,90 @@
+# Reusable deployment job: secrets sync → helm deploy → health gate.
+# On failure the deploy.sh script triggers rollback automatically; this job
+# additionally surfaces a redundant rollback step that any operator can rerun.
+parameters:
+  - name: serviceName
+    type: string
+  - name: image
+    type: string
+  - name: environment
+    type: string
+    values: [dev, staging, prod]
+  - name: k8sNamespace
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: aksCluster
+    type: string
+  - name: aksResourceGroup
+    type: string
+  - name: keyVaultName
+    type: string
+  - name: secretsManifest
+    type: string
+    default: 'secrets.manifest'
+  - name: approvalEnvironment
+    type: string
+
+jobs:
+  - deployment: deploy_${{ parameters.serviceName }}_${{ parameters.environment }}
+    displayName: 'Deploy ${{ parameters.serviceName }} → ${{ parameters.environment }}'
+    environment: '${{ parameters.approvalEnvironment }}'
+    pool:
+      vmImage: 'ubuntu-22.04'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - template: ../steps/install-tools.yml
+
+            - task: AzureCLI@2
+              displayName: 'Acquire AKS credentials'
+              inputs:
+                azureSubscription: '${{ parameters.azureServiceConnection }}'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  az aks get-credentials \
+                    --resource-group "${{ parameters.aksResourceGroup }}" \
+                    --name "${{ parameters.aksCluster }}" \
+                    --overwrite-existing
+
+            - task: AzureCLI@2
+              displayName: 'Sync secrets from Key Vault'
+              inputs:
+                azureSubscription: '${{ parameters.azureServiceConnection }}'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  export SECRET_NAME="${{ parameters.serviceName }}-secrets"
+                  export K8S_NAMESPACE="${{ parameters.k8sNamespace }}"
+                  export SECRETS_MANIFEST="${{ parameters.secretsManifest }}"
+                  export VAULT_BACKEND="azure"
+                  export AZURE_KEYVAULT="${{ parameters.keyVaultName }}"
+                  ./scripts/secrets-sync.sh
+
+            - task: AzureCLI@2
+              displayName: 'Deploy (with snapshot + auto-rollback)'
+              inputs:
+                azureSubscription: '${{ parameters.azureServiceConnection }}'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  export SERVICE_NAME="${{ parameters.serviceName }}"
+                  export IMAGE="${{ parameters.image }}"
+                  export K8S_NAMESPACE="${{ parameters.k8sNamespace }}"
+                  export ENVIRONMENT="${{ parameters.environment }}"
+                  export SNAPSHOT_DIR="$(Build.ArtifactStagingDirectory)/snapshots"
+                  ./scripts/deploy.sh
+
+            - task: PublishPipelineArtifact@1
+              displayName: 'Publish deploy snapshot'
+              condition: succeededOrFailed()
+              inputs:
+                targetPath: '$(Build.ArtifactStagingDirectory)/snapshots'
+                artifact: 'k8s-snapshot-${{ parameters.environment }}-$(Build.BuildId)'

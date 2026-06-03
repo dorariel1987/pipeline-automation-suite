@@ -1,0 +1,70 @@
+# Example consumer pipeline for the Terraform stack itself.
+trigger:
+  branches:
+    include: [main]
+  paths:
+    include: [terraform/**]
+
+resources:
+  repositories:
+    - repository: pipeline_suite
+      type: git
+      name: 'platform/pipeline-automation-suite'
+      ref: refs/tags/v1.0.0
+
+variables:
+  - template: ../templates/variables/common.yml@pipeline_suite
+
+stages:
+  - stage: Plan
+    displayName: 'Terraform plan (all envs)'
+    jobs:
+      - template: templates/jobs/terraform-plan.yml@pipeline_suite
+        parameters:
+          environment: dev
+          workingDirectory: 'terraform/environments/dev'
+          azureServiceConnection: $(azureSubscription)
+      - template: templates/jobs/terraform-plan.yml@pipeline_suite
+        parameters:
+          environment: staging
+          workingDirectory: 'terraform/environments/staging'
+          azureServiceConnection: $(azureSubscription)
+      - template: templates/jobs/terraform-plan.yml@pipeline_suite
+        parameters:
+          environment: prod
+          workingDirectory: 'terraform/environments/prod'
+          azureServiceConnection: $(azureSubscription)
+
+  - stage: Apply_dev
+    displayName: 'Apply (dev)'
+    dependsOn: Plan
+    condition: succeeded()
+    jobs:
+      - template: templates/jobs/terraform-apply.yml@pipeline_suite
+        parameters:
+          environment: dev
+          workingDirectory: 'terraform/environments/dev'
+          azureServiceConnection: $(azureSubscription)
+          approvalEnvironment: 'infra-dev'
+
+  - stage: Apply_staging
+    displayName: 'Apply (staging)'
+    dependsOn: Apply_dev
+    jobs:
+      - template: templates/jobs/terraform-apply.yml@pipeline_suite
+        parameters:
+          environment: staging
+          workingDirectory: 'terraform/environments/staging'
+          azureServiceConnection: $(azureSubscription)
+          approvalEnvironment: 'infra-staging'
+
+  - stage: Apply_prod
+    displayName: 'Apply (prod)'
+    dependsOn: Apply_staging
+    jobs:
+      - template: templates/jobs/terraform-apply.yml@pipeline_suite
+        parameters:
+          environment: prod
+          workingDirectory: 'terraform/environments/prod'
+          azureServiceConnection: $(azureSubscription)
+          approvalEnvironment: 'infra-prod'

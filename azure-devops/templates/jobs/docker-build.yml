@@ -1,0 +1,71 @@
+# Reusable job: build, scan and push a container image to ACR.
+# Outputs:
+#   image:  fully qualified image including tag
+parameters:
+  - name: serviceName
+    type: string
+  - name: dockerfile
+    type: string
+    default: 'Dockerfile'
+  - name: context
+    type: string
+    default: '.'
+  - name: containerRegistry
+    type: string
+  - name: imageRepo
+    type: string
+
+jobs:
+  - job: build_${{ parameters.serviceName }}
+    displayName: 'Build & push ${{ parameters.serviceName }}'
+    pool:
+      vmImage: 'ubuntu-22.04'
+    variables:
+      imageTag: '$(Build.BuildId)-$(Build.SourceVersion)'
+      fullImage: '${{ parameters.imageRepo }}:$(imageTag)'
+    steps:
+      - checkout: self
+        fetchDepth: 1
+
+      - task: Docker@2
+        displayName: 'Login to ACR'
+        inputs:
+          command: 'login'
+          containerRegistry: '${{ parameters.containerRegistry }}'
+
+      - task: Bash@3
+        displayName: 'Build image'
+        inputs:
+          targetType: 'inline'
+          script: |
+            set -euo pipefail
+            docker build \
+              --file "${{ parameters.dockerfile }}" \
+              --tag "$(fullImage)" \
+              --label "git.sha=$(Build.SourceVersion)" \
+              --label "ci.build=$(Build.BuildId)" \
+              "${{ parameters.context }}"
+
+      - task: Bash@3
+        displayName: 'Trivy security scan'
+        inputs:
+          targetType: 'inline'
+          script: |
+            set -euo pipefail
+            docker run --rm \
+              -v /var/run/docker.sock:/var/run/docker.sock \
+              aquasec/trivy:0.50.1 image \
+                --severity HIGH,CRITICAL \
+                --exit-code 1 \
+                --no-progress \
+                "$(fullImage)"
+
+      - task: Bash@3
+        displayName: 'Push image'
+        inputs:
+          targetType: 'inline'
+          script: |
+            set -euo pipefail
+            docker push "$(fullImage)"
+            echo "##vso[task.setvariable variable=image;isOutput=true]$(fullImage)"
+        name: setImageOutput

@@ -1,0 +1,33 @@
+parameters:
+  - name: terraformVersion
+    type: string
+    default: '1.7.5'
+  - name: kubectlVersion
+    type: string
+    default: '1.29.3'
+  - name: helmVersion
+    type: string
+    default: '3.14.4'
+
+steps:
+  - task: Bash@3
+    displayName: 'Install pinned CLI tools'
+    inputs:
+      targetType: 'inline'
+      script: |
+        set -euo pipefail
+        echo "Installing Terraform ${{ parameters.terraformVersion }}, kubectl ${{ parameters.kubectlVersion }}, Helm ${{ parameters.helmVersion }}"
+
+        curl -fsSLo /tmp/terraform.zip "https://releases.hashicorp.com/terraform/${{ parameters.terraformVersion }}/terraform_${{ parameters.terraformVersion }}_linux_amd64.zip"
+        sudo unzip -o /tmp/terraform.zip -d /usr/local/bin
+
+        curl -fsSLo /tmp/kubectl "https://dl.k8s.io/release/v${{ parameters.kubectlVersion }}/bin/linux/amd64/kubectl"
+        sudo install -m 0755 /tmp/kubectl /usr/local/bin/kubectl
+
+        curl -fsSLo /tmp/helm.tar.gz "https://get.helm.sh/helm-v${{ parameters.helmVersion }}-linux-amd64.tar.gz"
+        tar -xzf /tmp/helm.tar.gz -C /tmp
+        sudo install -m 0755 /tmp/linux-amd64/helm /usr/local/bin/helm
+
+        terraform version
+        kubectl version --client
+        helm version

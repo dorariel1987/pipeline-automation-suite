@@ -1,0 +1,47 @@
+# Reusable deployment job: download a previously published plan and apply it.
+parameters:
+  - name: environment
+    type: string
+    values: [dev, staging, prod]
+  - name: workingDirectory
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: terraformVersion
+    type: string
+    default: '1.7.5'
+  - name: approvalEnvironment
+    type: string
+
+jobs:
+  - deployment: tf_apply_${{ parameters.environment }}
+    displayName: 'Terraform apply (${{ parameters.environment }})'
+    environment: '${{ parameters.approvalEnvironment }}'
+    pool:
+      vmImage: 'ubuntu-22.04'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+
+            - template: ../steps/install-tools.yml
+              parameters:
+                terraformVersion: ${{ parameters.terraformVersion }}
+
+            - download: current
+              artifact: 'tfplan-${{ parameters.environment }}'
+
+            - task: AzureCLI@2
+              displayName: 'terraform apply'
+              inputs:
+                azureSubscription: '${{ parameters.azureServiceConnection }}'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  cp "$(Pipeline.Workspace)/tfplan-${{ parameters.environment }}" \
+                     "${{ parameters.workingDirectory }}/tfplan"
+                  cd "${{ parameters.workingDirectory }}"
+                  terraform init -input=false
+                  terraform apply -input=false -auto-approve tfplan

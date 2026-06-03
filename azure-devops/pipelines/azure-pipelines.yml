@@ -1,0 +1,70 @@
+# Example consumer pipeline.
+# Drop a copy of this file into a service repository and edit only the
+# variables block — every stage/job is sourced from the suite.
+
+trigger:
+  branches:
+    include: [main]
+  paths:
+    exclude: [docs/*, README.md]
+
+pr:
+  branches:
+    include: [main]
+
+resources:
+  repositories:
+    - repository: pipeline_suite
+      type: git
+      name: 'platform/pipeline-automation-suite'
+      ref: refs/tags/v1.0.0
+
+variables:
+  - template: ../templates/variables/common.yml@pipeline_suite
+  - name: serviceName
+    value: 'sample-api'
+  - name: imageRepo
+    value: 'myacr.azurecr.io/sample-api'
+
+stages:
+  - template: templates/stages/ci.yml@pipeline_suite
+    parameters:
+      serviceName: $(serviceName)
+      containerRegistry: $(containerRegistryServiceConnection)
+      imageRepo: $(imageRepo)
+
+  - template: templates/stages/cd.yml@pipeline_suite
+    parameters:
+      serviceName: $(serviceName)
+      image: '$(imageRepo):$(Build.BuildId)-$(Build.SourceVersion)'
+      environment: 'dev'
+      k8sNamespace: 'sample-api-dev'
+      azureServiceConnection: $(azureSubscription)
+      aksCluster: 'aks-dev-eastus'
+      aksResourceGroup: 'rg-platform-dev'
+      keyVaultName: 'kv-platform-dev'
+      approvalEnvironment: 'sample-api-dev'
+
+  - template: templates/stages/cd.yml@pipeline_suite
+    parameters:
+      serviceName: $(serviceName)
+      image: '$(imageRepo):$(Build.BuildId)-$(Build.SourceVersion)'
+      environment: 'staging'
+      k8sNamespace: 'sample-api-staging'
+      azureServiceConnection: $(azureSubscription)
+      aksCluster: 'aks-staging-eastus'
+      aksResourceGroup: 'rg-platform-staging'
+      keyVaultName: 'kv-platform-staging'
+      approvalEnvironment: 'sample-api-staging'
+
+  - template: templates/stages/cd.yml@pipeline_suite
+    parameters:
+      serviceName: $(serviceName)
+      image: '$(imageRepo):$(Build.BuildId)-$(Build.SourceVersion)'
+      environment: 'prod'
+      k8sNamespace: 'sample-api-prod'
+      azureServiceConnection: $(azureSubscription)
+      aksCluster: 'aks-prod-eastus'
+      aksResourceGroup: 'rg-platform-prod'
+      keyVaultName: 'kv-platform-prod'
+      approvalEnvironment: 'sample-api-prod'

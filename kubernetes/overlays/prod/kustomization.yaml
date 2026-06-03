@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sample-app-prod
+
+resources:
+  - ../../base
+  - resources.yaml
+
+labels:
+  - pairs:
+      environment: prod
+    includeSelectors: true
+
+replicas:
+  - name: sample-app
+    count: 4
+
+images:
+  - name: nginx
+    newName: myacr.azurecr.io/sample-api
+    newTag: stable

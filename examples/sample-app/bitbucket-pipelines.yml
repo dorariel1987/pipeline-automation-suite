@@ -1,0 +1,29 @@
+image: atlassian/default-image:4
+
+import: pipeline-automation-suite/shared/definitions.yml
+
+pipelines:
+  pull-requests:
+    '**':
+      - step: *lint-and-test
+      - step: *docker-build-push
+
+  branches:
+    main:
+      - step: *lint-and-test
+      - step: *docker-build-push
+      - step:
+          <<: *k8s-deploy
+          name: 'Deploy → dev'
+          deployment: dev
+      - step:
+          <<: *k8s-deploy
+          name: 'Deploy → prod'
+          deployment: production
+          trigger: manual
+
+  custom:
+    rollback-prod:
+      - step:
+          <<: *k8s-rollback
+          deployment: production

@@ -1,0 +1,64 @@
+# Example consumer pipeline for a service repository.
+# Lives at the repo root of any product team that wants to adopt the suite.
+#
+# Required repository variables (Repo Settings → Repository variables):
+#   ACR_LOGIN_SERVER, ACR_USERNAME, ACR_PASSWORD
+#   AZURE_SP_ID, AZURE_SP_SECRET, AZURE_TENANT_ID
+#   SERVICE_NAME, IMAGE_REPO, KEY_VAULT_NAME
+#   AKS_CLUSTER, AKS_RESOURCE_GROUP
+
+image: atlassian/default-image:4
+
+# Pull shared definitions from the platform repo.
+# Bitbucket replaces this with the live file at runtime when using the
+# Pipes import mechanism or a repository-level `import` directive.
+import: pipeline-automation-suite/shared/definitions.yml
+
+pipelines:
+  default:
+    - step: *lint-and-test
+
+  pull-requests:
+    '**':
+      - step: *lint-and-test
+      - step: *docker-build-push
+
+  branches:
+    main:
+      - step: *lint-and-test
+      - step: *docker-build-push
+      - step:
+          <<: *k8s-deploy
+          name: 'Deploy → dev'
+          deployment: dev
+      - step:
+          <<: *k8s-deploy
+          name: 'Deploy → staging'
+          deployment: staging
+          trigger: manual
+      - step:
+          <<: *k8s-deploy
+          name: 'Deploy → prod'
+          deployment: production
+          trigger: manual
+      - step:
+          <<: *k8s-rollback
+          name: 'Manual rollback (prod)'
+          deployment: production
+
+  custom:
+    rollback-prod:
+      - step: *k8s-rollback
+    plan-infra:
+      - step:
+          <<: *terraform-plan
+          name: 'Plan dev'
+          variables:
+            TF_WORKDIR: terraform/environments/dev
+            ENVIRONMENT: dev
+      - step:
+          <<: *terraform-plan
+          name: 'Plan prod'
+          variables:
+            TF_WORKDIR: terraform/environments/prod
+            ENVIRONMENT: prod

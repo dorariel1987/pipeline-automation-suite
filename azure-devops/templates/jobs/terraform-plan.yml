@@ -1,0 +1,44 @@
+# Reusable job: terraform fmt + validate + plan for an environment stack.
+parameters:
+  - name: environment
+    type: string
+    values: [dev, staging, prod]
+  - name: workingDirectory
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: terraformVersion
+    type: string
+    default: '1.7.5'
+
+jobs:
+  - job: tf_plan_${{ parameters.environment }}
+    displayName: 'Terraform plan (${{ parameters.environment }})'
+    pool:
+      vmImage: 'ubuntu-22.04'
+    steps:
+      - checkout: self
+
+      - template: ../steps/install-tools.yml
+        parameters:
+          terraformVersion: ${{ parameters.terraformVersion }}
+
+      - task: AzureCLI@2
+        displayName: 'terraform init/validate/plan'
+        inputs:
+          azureSubscription: '${{ parameters.azureServiceConnection }}'
+          scriptType: bash
+          scriptLocation: inlineScript
+          inlineScript: |
+            set -euo pipefail
+            cd "${{ parameters.workingDirectory }}"
+            terraform fmt -check -recursive
+            terraform init -input=false
+            terraform validate
+            terraform plan -input=false -out=tfplan -var "environment=${{ parameters.environment }}"
+
+      - task: PublishPipelineArtifact@1
+        displayName: 'Publish plan artifact'
+        inputs:
+          targetPath: '${{ parameters.workingDirectory }}/tfplan'
+          artifact: 'tfplan-${{ parameters.environment }}'

@@ -1,0 +1,23 @@
+name: Rollback Trigger
+description: Restore the previous Kubernetes Deployment revision (or snapshot).
+image: pipelineautomationsuite/rollback-trigger:1.0.0
+category: Deployment
+
+variables:
+  - name: SERVICE_NAME
+    required: true
+  - name: K8S_NAMESPACE
+    required: true
+  - name: AKS_CLUSTER
+    required: true
+  - name: AKS_RESOURCE_GROUP
+    required: true
+  - name: AZURE_SP_ID
+    required: true
+  - name: AZURE_SP_SECRET
+    required: true
+    secured: true
+  - name: AZURE_TENANT_ID
+    required: true
+  - name: SNAPSHOT_PATH
+    default: ''

@@ -1,0 +1,91 @@
+# Shared step definitions imported by consumer pipelines via:
+#   import: pipeline-automation-suite/shared/definitions.yml
+#
+# Bitbucket lets us define `definitions.steps.<name>` and reuse them with
+# `- step: *<name>` (YAML anchors).
+
+definitions:
+  caches:
+    helm: ~/.cache/helm
+    terraform: .terraform
+
+  services:
+    docker:
+      memory: 3072
+
+  steps:
+    - step: &lint-and-test
+        name: Lint & unit tests
+        image: atlassian/default-image:4
+        script:
+          - apt-get update -qq && apt-get install -y -qq shellcheck bats
+          - shellcheck scripts/*.sh scripts/lib/*.sh
+          - bats scripts/tests/
+
+    - step: &docker-build-push
+        name: Build & push image
+        image: atlassian/default-image:4
+        services: [docker]
+        script:
+          - export IMAGE_TAG="${BITBUCKET_BUILD_NUMBER}-${BITBUCKET_COMMIT:0:7}"
+          - export FULL_IMAGE="${IMAGE_REPO}:${IMAGE_TAG}"
+          - echo "${ACR_PASSWORD}" | docker login "${ACR_LOGIN_SERVER}" -u "${ACR_USERNAME}" --password-stdin
+          - docker build -t "${FULL_IMAGE}" --label "git.sha=${BITBUCKET_COMMIT}" .
+          - docker run --rm -v /var/run/docker.sock:/var/run/docker.sock
+              aquasec/trivy:0.50.1 image --severity HIGH,CRITICAL --exit-code 1 "${FULL_IMAGE}"
+          - docker push "${FULL_IMAGE}"
+          - echo "${FULL_IMAGE}" > image.txt
+        artifacts:
+          - image.txt
+
+    - step: &terraform-plan
+        name: Terraform plan
+        image: hashicorp/terraform:1.7.5
+        script:
+          - cd "${TF_WORKDIR}"
+          - terraform fmt -check -recursive
+          - terraform init -input=false
+          - terraform validate
+          - terraform plan -input=false -out=tfplan -var "environment=${ENVIRONMENT}"
+        artifacts:
+          - "${TF_WORKDIR}/tfplan"
+
+    - step: &terraform-apply
+        name: Terraform apply
+        image: hashicorp/terraform:1.7.5
+        deployment: production
+        script:
+          - cd "${TF_WORKDIR}"
+          - terraform init -input=false
+          - terraform apply -input=false -auto-approve tfplan
+
+    - step: &k8s-deploy
+        name: Deploy to AKS
+        image: mcr.microsoft.com/azure-cli:2.59.0
+        script:
+          # Install kubectl + helm on top of the azure-cli image
+          - curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.29.3/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
+          - curl -fsSL https://get.helm.sh/helm-v3.14.4-linux-amd64.tar.gz | tar xz -C /tmp && mv /tmp/linux-amd64/helm /usr/local/bin/helm
+          # AKS credentials via SP
+          - az login --service-principal -u "${AZURE_SP_ID}" -p "${AZURE_SP_SECRET}" --tenant "${AZURE_TENANT_ID}"
+          - az aks get-credentials --resource-group "${AKS_RESOURCE_GROUP}" --name "${AKS_CLUSTER}" --overwrite-existing
+          # Secrets first, then deploy
+          - export IMAGE="$(cat image.txt)"
+          - export SECRET_NAME="${SERVICE_NAME}-secrets"
+          - export VAULT_BACKEND="azure"
+          - export AZURE_KEYVAULT="${KEY_VAULT_NAME}"
+          - export SECRETS_MANIFEST="${SECRETS_MANIFEST:-secrets.manifest}"
+          - ./scripts/secrets-sync.sh
+          - ./scripts/deploy.sh
+        artifacts:
+          - /tmp/k8s-snapshots/**
+
+    - step: &k8s-rollback
+        name: Rollback AKS deploy
+        image: mcr.microsoft.com/azure-cli:2.59.0
+        trigger: manual
+        script:
+          - curl -fsSLo /usr/local/bin/kubectl https://dl.k8s.io/release/v1.29.3/bin/linux/amd64/kubectl && chmod +x /usr/local/bin/kubectl
+          - az login --service-principal -u "${AZURE_SP_ID}" -p "${AZURE_SP_SECRET}" --tenant "${AZURE_TENANT_ID}"
+          - az aks get-credentials --resource-group "${AKS_RESOURCE_GROUP}" --name "${AKS_CLUSTER}" --overwrite-existing
+          - ./scripts/rollback.sh

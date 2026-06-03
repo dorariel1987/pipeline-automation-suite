@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: sample-app-staging
+
+resources:
+  - ../../base
+
+labels:
+  - pairs:
+      environment: staging
+    includeSelectors: true
+
+replicas:
+  - name: sample-app
+    count: 2
+
+images:
+  - name: nginx
+    newName: myacr.azurecr.io/sample-api
+    newTag: staging

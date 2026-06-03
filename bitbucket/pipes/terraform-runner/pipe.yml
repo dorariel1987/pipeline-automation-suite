@@ -1,0 +1,22 @@
+name: Terraform Runner
+description: Run init / fmt-check / validate / plan / apply for a Terraform stack.
+image: pipelineautomationsuite/terraform-runner:1.0.0
+category: Infrastructure
+
+variables:
+  - name: TF_WORKDIR
+    required: true
+  - name: ENVIRONMENT
+    required: true
+  - name: ACTION
+    required: true
+    allowed_values: [plan, apply]
+  - name: AZURE_SP_ID
+    required: true
+  - name: AZURE_SP_SECRET
+    required: true
+    secured: true
+  - name: AZURE_TENANT_ID
+    required: true
+  - name: AZURE_SUBSCRIPTION_ID
+    required: true

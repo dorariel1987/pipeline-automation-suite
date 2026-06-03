@@ -1,0 +1,31 @@
+name: K8s Deployer
+description: Deploy a service to AKS with snapshotting and auto-rollback.
+image: pipelineautomationsuite/k8s-deployer:1.0.0
+category: Deployment
+
+variables:
+  - name: SERVICE_NAME
+    required: true
+  - name: IMAGE
+    required: true
+  - name: K8S_NAMESPACE
+    required: true
+  - name: ENVIRONMENT
+    required: true
+  - name: AKS_CLUSTER
+    required: true
+  - name: AKS_RESOURCE_GROUP
+    required: true
+  - name: AZURE_SP_ID
+    required: true
+  - name: AZURE_SP_SECRET
+    required: true
+    secured: true
+  - name: AZURE_TENANT_ID
+    required: true
+  - name: HEALTH_PATH
+    default: /healthz
+  - name: ROLLOUT_TIMEOUT
+    default: '300'
+  - name: DEBUG
+    default: 'false'

@@ -1,0 +1,43 @@
+# Composite CI stage: build container image + run unit/lint suite.
+parameters:
+  - name: serviceName
+    type: string
+  - name: containerRegistry
+    type: string
+  - name: imageRepo
+    type: string
+  - name: dockerfile
+    type: string
+    default: 'Dockerfile'
+  - name: context
+    type: string
+    default: '.'
+
+stages:
+  - stage: CI
+    displayName: 'CI · Build and test ${{ parameters.serviceName }}'
+    jobs:
+      - job: lint_and_test
+        displayName: 'Lint & unit tests'
+        pool:
+          vmImage: 'ubuntu-22.04'
+        steps:
+          - checkout: self
+          - task: Bash@3
+            displayName: 'shellcheck + bats'
+            inputs:
+              targetType: 'inline'
+              script: |
+                set -euo pipefail
+                sudo apt-get update -qq
+                sudo apt-get install -y -qq shellcheck bats
+                shellcheck scripts/*.sh scripts/lib/*.sh
+                bats scripts/tests/
+
+      - template: ../jobs/docker-build.yml
+        parameters:
+          serviceName: ${{ parameters.serviceName }}
+          containerRegistry: ${{ parameters.containerRegistry }}
+          imageRepo: ${{ parameters.imageRepo }}
+          dockerfile: ${{ parameters.dockerfile }}
+          context: ${{ parameters.context }}

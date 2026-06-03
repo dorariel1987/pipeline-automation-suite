@@ -1,0 +1,16 @@
+# Default variables shared by all consumer pipelines.
+# Override by passing different values from the consumer pipeline.
+
+variables:
+  vmImage: 'ubuntu-22.04'
+  terraformVersion: '1.7.5'
+  kubectlVersion: '1.29.3'
+  helmVersion: '3.14.4'
+
+  # ACR / Key Vault are environment-scoped via templateContext.
+  containerRegistryServiceConnection: 'acr-shared'
+  azureSubscription: 'azure-platform-prod'
+
+  # Standard health gate.
+  healthPath: '/healthz'
+  rolloutTimeout: '300'

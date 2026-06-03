@@ -1,0 +1,37 @@
+# Composite CD stage: per-environment deploy with manual rollback handle.
+parameters:
+  - name: serviceName
+    type: string
+  - name: image
+    type: string
+  - name: environment
+    type: string
+    values: [dev, staging, prod]
+  - name: k8sNamespace
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: aksCluster
+    type: string
+  - name: aksResourceGroup
+    type: string
+  - name: keyVaultName
+    type: string
+  - name: approvalEnvironment
+    type: string
+
+stages:
+  - stage: CD_${{ parameters.environment }}
+    displayName: 'CD · ${{ parameters.environment }}'
+    jobs:
+      - template: ../jobs/k8s-deploy.yml
+        parameters:
+          serviceName: ${{ parameters.serviceName }}
+          image: ${{ parameters.image }}
+          environment: ${{ parameters.environment }}
+          k8sNamespace: ${{ parameters.k8sNamespace }}
+          azureServiceConnection: ${{ parameters.azureServiceConnection }}
+          aksCluster: ${{ parameters.aksCluster }}
+          aksResourceGroup: ${{ parameters.aksResourceGroup }}
+          keyVaultName: ${{ parameters.keyVaultName }}
+          approvalEnvironment: ${{ parameters.approvalEnvironment }}

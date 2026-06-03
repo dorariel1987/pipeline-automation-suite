@@ -1,0 +1,67 @@
+# Manual / on-failure rollback job. Restores either from the latest published
+# snapshot artifact or via `kubectl rollout undo` when no snapshot exists.
+parameters:
+  - name: serviceName
+    type: string
+  - name: environment
+    type: string
+    values: [dev, staging, prod]
+  - name: k8sNamespace
+    type: string
+  - name: azureServiceConnection
+    type: string
+  - name: aksCluster
+    type: string
+  - name: aksResourceGroup
+    type: string
+  - name: snapshotArtifact
+    type: string
+    default: ''
+  - name: approvalEnvironment
+    type: string
+
+jobs:
+  - deployment: rollback_${{ parameters.serviceName }}_${{ parameters.environment }}
+    displayName: 'Rollback ${{ parameters.serviceName }} (${{ parameters.environment }})'
+    environment: '${{ parameters.approvalEnvironment }}'
+    pool:
+      vmImage: 'ubuntu-22.04'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+            - checkout: self
+            - template: ../steps/install-tools.yml
+
+            - ${{ if ne(parameters.snapshotArtifact, '') }}:
+                - download: current
+                  artifact: '${{ parameters.snapshotArtifact }}'
+
+            - task: AzureCLI@2
+              displayName: 'AKS credentials'
+              inputs:
+                azureSubscription: '${{ parameters.azureServiceConnection }}'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  az aks get-credentials \
+                    --resource-group "${{ parameters.aksResourceGroup }}" \
+                    --name "${{ parameters.aksCluster }}" \
+                    --overwrite-existing
+
+            - task: AzureCLI@2
+              displayName: 'Run rollback.sh'
+              inputs:
+                azureSubscription: '${{ parameters.azureServiceConnection }}'
+                scriptType: bash
+                scriptLocation: inlineScript
+                inlineScript: |
+                  set -euo pipefail
+                  export SERVICE_NAME="${{ parameters.serviceName }}"
+                  export K8S_NAMESPACE="${{ parameters.k8sNamespace }}"
+                  if [[ -d "$(Pipeline.Workspace)/${{ parameters.snapshotArtifact }}" ]]; then
+                    snap_dir="$(find "$(Pipeline.Workspace)/${{ parameters.snapshotArtifact }}" \
+                                 -name deployment.yaml -printf '%h\n' | head -1)"
+                    [[ -n "$snap_dir" ]] && export SNAPSHOT_PATH="$snap_dir"
+                  fi
+                  ./scripts/rollback.sh

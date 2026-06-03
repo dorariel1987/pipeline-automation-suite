@@ -1,0 +1,51 @@
+# Drop-in pipeline for the sample-api service. Lives at the repo root of the
+# product team's service repository.
+
+trigger:
+  branches:
+    include: [main]
+
+resources:
+  repositories:
+    - repository: pipeline_suite
+      type: git
+      name: 'platform/pipeline-automation-suite'
+      ref: refs/tags/v1.0.0
+
+variables:
+  - template: azure-devops/templates/variables/common.yml@pipeline_suite
+  - name: serviceName
+    value: 'sample-api'
+  - name: imageRepo
+    value: 'myacr.azurecr.io/sample-api'
+
+stages:
+  - template: azure-devops/templates/stages/ci.yml@pipeline_suite
+    parameters:
+      serviceName: $(serviceName)
+      containerRegistry: $(containerRegistryServiceConnection)
+      imageRepo: $(imageRepo)
+
+  - template: azure-devops/templates/stages/cd.yml@pipeline_suite
+    parameters:
+      serviceName: $(serviceName)
+      image: '$(imageRepo):$(Build.BuildId)'
+      environment: dev
+      k8sNamespace: sample-api-dev
+      azureServiceConnection: $(azureSubscription)
+      aksCluster: aks-platform-dev
+      aksResourceGroup: rg-platform-dev
+      keyVaultName: kv-platform-dev
+      approvalEnvironment: sample-api-dev
+
+  - template: azure-devops/templates/stages/cd.yml@pipeline_suite
+    parameters:
+      serviceName: $(serviceName)
+      image: '$(imageRepo):$(Build.BuildId)'
+      environment: prod
+      k8sNamespace: sample-api-prod
+      azureServiceConnection: $(azureSubscription)
+      aksCluster: aks-platform-prod
+      aksResourceGroup: rg-platform-prod
+      keyVaultName: kv-platform-prod
+      approvalEnvironment: sample-api-prod
